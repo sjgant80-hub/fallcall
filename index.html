@@ -109,17 +109,6 @@ nav.scrolled{border-bottom-color:var(--border);}
 .comp-partial{color:var(--gold);}
 .comp-highlight{background:var(--accent-g);}
 
-/* pricing */
-.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:48px;}
-.price-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px 28px;display:flex;flex-direction:column;}
-.price-card.featured{border-color:var(--accent);box-shadow:0 0 40px var(--accent-g);}
-.price-tier{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;}
-.price-amount{font-size:36px;font-weight:700;color:var(--bright);margin-bottom:4px;}
-.price-amount span{font-size:14px;font-weight:400;color:var(--dim);}
-.price-desc{font-size:13px;color:var(--dim);margin-bottom:24px;line-height:1.6;flex:1;}
-.price-features{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;}
-.price-feat{font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;}
-.price-feat::before{content:'✓';color:var(--green);font-size:11px;font-weight:700;}
 
 /* try it section */
 .try-panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px;margin-top:48px;}
@@ -145,7 +134,6 @@ footer{padding:48px 0;border-top:1px solid var(--border);}
   .hero-inner{grid-template-columns:1fr;gap:40px;}
   .nav-links{display:none;}
   .layers-grid{grid-template-columns:1fr;}
-  .pricing-grid{grid-template-columns:1fr;}
   .comp-table{font-size:11px;}
   .comp-table th,.comp-table td{padding:10px 8px;}
 }
@@ -163,7 +151,6 @@ footer{padding:48px 0;border-top:1px solid var(--border);}
   <div class="nav-links">
     <a href="#layers">How it works</a>
     <a href="#compare">vs Gong</a>
-    <a href="#pricing">Pricing</a>
     <a href="#try" class="nav-cta">Try it free</a>
   </div>
 </nav>
@@ -288,63 +275,11 @@ footer{padding:48px 0;border-top:1px solid var(--border);}
         <tr><td>Defence mechanism analysis</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
         <tr><td>Specific word-for-word coaching</td><td class="comp-highlight comp-check">✓</td><td class="comp-partial">generic</td><td class="comp-partial">generic</td><td class="comp-x">✗</td></tr>
         <tr><td>CRM reality mismatch</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
-        <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Price per user/month</td><td class="comp-highlight" style="color:var(--green);font-weight:700">£47</td><td style="color:var(--red)">$100-150</td><td style="color:var(--red)">$100</td><td style="color:var(--red)">$85</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- PRICING -->
-<section id="pricing">
-  <div class="wrap">
-    <p class="section-label fade-in">Pricing</p>
-    <h2 class="section-title fade-in fade-d1">Half the price. Ten times the depth.</h2>
-
-    <div class="pricing-grid">
-      <div class="price-card fade-in">
-        <p class="price-tier">Starter</p>
-        <p class="price-amount">Free</p>
-        <p class="price-desc">Paste a transcript. Get the full 7-layer analysis. See what you've been missing. No account needed.</p>
-        <div class="price-features">
-          <div class="price-feat">5 calls per month</div>
-          <div class="price-feat">All 7 analysis layers</div>
-          <div class="price-feat">XML + markdown export</div>
-          <div class="price-feat">No account required</div>
-        </div>
-        <button class="btn btn-ghost" onclick="document.getElementById('try').scrollIntoView({behavior:'smooth'})">Try it now</button>
-      </div>
-      <div class="price-card featured fade-in fade-d1">
-        <p class="price-tier">Team</p>
-        <p class="price-amount">£47 <span>/user/month</span></p>
-        <p class="price-desc">For sales managers who need team-level patterns, rep comparison, and coaching recommendations that actually tell you what to say.</p>
-        <div class="price-features">
-          <div class="price-feat">Unlimited calls</div>
-          <div class="price-feat">Team pattern analysis</div>
-          <div class="price-feat">Rep benchmarking</div>
-          <div class="price-feat">Coaching recommendation engine</div>
-          <div class="price-feat">CRM integration</div>
-          <div class="price-feat">Manager dashboard</div>
-          <div class="price-feat">Priority support</div>
-        </div>
-        <button class="btn btn-primary">Start 14-day trial</button>
-      </div>
-      <div class="price-card fade-in fade-d2">
-        <p class="price-tier">Enterprise</p>
-        <p class="price-amount">Custom</p>
-        <p class="price-desc">Custom objection codes for your industry. Custom signal types for your vertical. Full 8+1 agent architecture. Dedicated implementation.</p>
-        <div class="price-features">
-          <div class="price-feat">Everything in Team</div>
-          <div class="price-feat">Custom analysis framework</div>
-          <div class="price-feat">API access</div>
-          <div class="price-feat">Webhook integration</div>
-          <div class="price-feat">Dedicated CSM</div>
-          <div class="price-feat">Konomi licence system</div>
-        </div>
-        <button class="btn btn-ghost">Talk to us</button>
-      </div>
-    </div>
-  </div>
-</section>
 
 <!-- TRY IT -->
 <section id="try" style="background:var(--surface);">
@@ -370,7 +305,7 @@ Rep: Great, so let me tell you about our platform..."></textarea>
   <div class="wrap footer-inner">
     <p class="footer-text">
       FallCall — AI Sales Call Intelligence<br>
-      Seven layers deep. Half the price. Ten times the insight.<br>
+      Seven layers deep. Ten times the insight.<br>
       Built by <span style="color:var(--accent)">AI Native Solutions</span> · Powered by Konomi Architecture<br>
       <span style="color:var(--accent)">◊</span>
     </p>
@@ -378,7 +313,7 @@ Rep: Great, so let me tell you about our platform..."></textarea>
       <a href="#">API Docs</a>
       <a href="#">Privacy</a>
       <a href="#">Terms</a>
-      <a href="https://ai-nativesolutions.com">AI Native Solutions</a>
+      <a href="https://fall127agents.github.io/ai-nativesolutions/">AI Native Solutions</a>
     </div>
   </div>
 </footer>
@@ -448,7 +383,7 @@ Output as clean markdown with headers for each layer. Be specific. Quote exact t
       }else{
         const key=localStorage.getItem('anthropic_key');
         if(!key)continue;
-        const r=await fetch(b.url,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,system:systemPrompt,messages:[{role:'user',content:'TRANSCRIPT:\\n'+text}]})});
+        const r=await fetch(b.url,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,system:systemPrompt,messages:[{role:'user',content:'TRANSCRIPT:\\n'+text}]})});
         const d=await r.json();
         result=d.content?.filter(c=>c.type==='text').map(c=>c.text).join('\\n');
       }
