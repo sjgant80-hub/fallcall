@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html><head><title>FallCall Live — Audio Engine</title></head>
+<body>
+<script>
+// ◊ FallCall Live — Offscreen Audio Engine
+// Captures tab audio → Deepgram streaming → rolling window analysis → results to sidebar
+// This runs in an offscreen document (MV3) with full Web API access
+
+let mediaStream = null;
+let mediaRecorder = null;
+let deepgramWs = null;
+let isProcessing = false;
+let callStartTime = null;
+let transcript = [];        // Full call transcript: [{speaker, text, start, end, isFinal}]
+let rollingWindow = [];     // Last 60s of utterances for instant analysis
+const WINDOW_SECONDS = 60;
+const ANALYSIS_INTERVAL = 3000; // Analyse every 3 seconds
+let analysisTimer = null;
+
+// ── Message Listener ────────────────────────────────────────
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === 'startProcessing') {
+    startProcessing(msg.streamId, msg.deepgramKey);
+  } else if (msg.action === 'stopProcessing') {
+    stopProcessing();
+  }
+});
+
+// ── Start Audio Processing ──────────────────────────────────
+async function startProcessing(streamId, deepgramKey) {
+  if (isProcessing) return;
+  isProcessing = true;
+  callStartTime = Date.now();
+  transcript = [];
+  rollingWindow = [];
+
+  try {
+    // 1. Create MediaStream from tab capture stream ID
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: {
+          chromeMediaSource: 'tab',
+          chromeMediaSourceId: streamId
+        }
+      }
+    });
+
+    // 2. Connect to Deepgram if key available
+    if (deepgramKey) {
+      connectDeepgram(deepgramKey);
+    } else {
+      console.warn('FallCall: No Deepgram key — running in demo mode');
+      startDemoMode();
+    }
+
+    // 3. Start rolling analysis loop
+    analysisTimer = setInterval(() => runRollingAnalysis(), ANALYSIS_INTERVAL);
+
+  } catch (err) {
+    console.error('FallCall: Audio capture failed:', err);
+    isProcessing = false;
+  }
+}
+
+// ── Deepgram WebSocket ──────────────────────────────────────
+function connectDeepgram(key) {
+  const params = new URLSearchParams({
+    model: 'nova-2',
+    language: 'en',
+    smart_format: 'true',
+    diarize: 'true',
+    interim_results: 'true',
+    endpointing: '300',
+    utterance_end_ms: '1000'
+  });
+
+  deepgramWs = new WebSocket('wss://api.deepgram.com/v1/listen?' + params.toString(), ['token', key]);
+
+  deepgramWs.onopen = () => {
+    console.log('FallCall: Deepgram connected');
+    startStreaming();
+  };
+
+  deepgramWs.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleDeepgramResponse(data);
+    } catch (e) {
+      console.warn('FallCall: Deepgram parse error:', e);
+    }
+  };
+
+  deepgramWs.onerror = (err) => {
+    console.error('FallCall: Deepgram error:', err);
+  };
+
+  deepgramWs.onclose = (event) => {
+    console.log('FallCall: Deepgram closed:', event.code, event.reason);
+  };
+}
+
+// ── Stream Audio to Deepgram ────────────────────────────────
+function startStreaming() {
+  if (!mediaStream || !deepgramWs) return;
+
+  // Use MediaRecorder to send WebM/Opus chunks — Deepgram handles decoding
+  try {
+    mediaRecorder = new MediaRecorder(mediaStream, {
+      mimeType: 'audio/webm;codecs=opus'
+    });
+  } catch {
+    // Fallback if opus not supported
+    mediaRecorder = new MediaRecorder(mediaStream);
+  }
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0 && deepgramWs && deepgramWs.readyState === WebSocket.OPEN) {
+      deepgramWs.send(event.data);
+    }
+  };
+
+  // Send chunks every 250ms for low latency
+  mediaRecorder.start(250);
+}
+
+// ── Handle Deepgram Transcript ──────────────────────────────
+function handleDeepgramResponse(data) {
+  if (!data.channel || !data.channel.alternatives || !data.channel.alternatives.length) return;
+
+  const alt = data.channel.alternatives[0];
+  const text = alt.transcript || '';
+  if (!text.trim()) return;
+
+  const isFinal = data.is_final;
+  const words = alt.words || [];
+
+  // Determine speaker from diarisation
+  let speaker = 'unknown';
+  if (words.length > 0 && words[0].speaker !== undefined) {
+    // Speaker 0 is typically the rep (initiator), speaker 1 is prospect
+    speaker = words[0].speaker === 0 ? 'rep' : 'prospect';
+  }
+
+  const startTime = words.length > 0 ? words[0].start : (Date.now() - callStartTime) / 1000;
+  const endTime = words.length > 0 ? words[words.length - 1].end : startTime + 1;
+
+  const utterance = {
+    speaker,
+    text: text.trim(),
+    start: startTime,
+    end: endTime,
+    duration: endTime - startTime,
+    wordCount: text.trim().split(/\s+/).length,
+    isFinal,
+    timestamp: Date.now()
+  };
+
+  if (isFinal) {
+    transcript.push(utterance);
+    rollingWindow.push(utterance);
+
+    // Trim rolling window to last 60 seconds
+    const cutoff = (Date.now() - callStartTime) / 1000 - WINDOW_SECONDS;
+    rollingWindow = rollingWindow.filter(u => u.end > cutoff);
+
+    // Forward to content script
+    chrome.runtime.sendMessage({
+      action: 'transcript',
+      data: utterance
+    });
+  }
+}
+
+// ── Demo Mode (no Deepgram key) ─────────────────────────────
+function startDemoMode() {
+  // Simulate transcript updates for testing the UI
+  const demoLines = [
+    { speaker: 'rep', text: 'Hi Sarah, thanks for taking the time today.', delay: 2000 },
+    { speaker: 'prospect', text: 'Yeah no problem, I have about twenty minutes.', delay: 5000 },
+    { speaker: 'rep', text: 'Great. So let me tell you about our platform and what it can do for your team.', delay: 8000 },
+    { speaker: 'rep', text: 'We have an AI-powered analytics suite that integrates with your existing CRM and provides real-time insights across your entire pipeline.', delay: 14000 },
+    { speaker: 'prospect', text: 'Okay.', delay: 17000 },
+    { speaker: 'rep', text: 'The key differentiator is our predictive engine. It can forecast deal outcomes with ninety-two percent accuracy based on conversation patterns.', delay: 23000 },
+    { speaker: 'prospect', text: "Look, I'll be honest, we're kind of drowning right now. Our team is stretched thin and the last thing I need is another tool to learn.", delay: 28000 },
+    { speaker: 'rep', text: "I totally understand. Let me show you how easy the onboarding is. It's literally three clicks to connect.", delay: 33000 },
+    { speaker: 'prospect', text: "Mm-hmm.", delay: 36000 },
+    { speaker: 'rep', text: "And the ROI is incredible. Most customers see a forty percent improvement in win rates within the first quarter.", delay: 41000 },
+    { speaker: 'prospect', text: "Yeah I'd need to check with my boss on this. Can you send me some materials?", delay: 46000 },
+    { speaker: 'rep', text: "Absolutely! I'll send everything over. Should we book a follow-up for next week?", delay: 50000 },
+    { speaker: 'prospect', text: "Sure, yeah, that works.", delay: 53000 },
+  ];
+
+  let elapsed = 0;
+  demoLines.forEach(line => {
+    setTimeout(() => {
+      if (!isProcessing) return;
+      const utterance = {
+        speaker: line.speaker,
+        text: line.text,
+        start: line.delay / 1000,
+        end: (line.delay / 1000) + (line.text.split(/\s+/).length * 0.3),
+        duration: line.text.split(/\s+/).length * 0.3,
+        wordCount: line.text.split(/\s+/).length,
+        isFinal: true,
+        timestamp: Date.now()
+      };
+      transcript.push(utterance);
+      rollingWindow.push(utterance);
+      chrome.runtime.sendMessage({ action: 'transcript', data: utterance });
+    }, line.delay);
+  });
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ROLLING WINDOW ANALYSIS ENGINE — Pure JS, no AI, instant
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function runRollingAnalysis() {
+  if (!transcript.length) return;
+
+  const analysis = {
+    talkRatio:      calcTalkRatio(),
+    monologue:      detectMonologue(),
+    questionType:   classifyLastQuestion(),
+    silence:        detectSilence(),
+    objections:     detectObjections(),
+    signals:        detectSignals(),
+    ghostRisk:      detectGhost(),
+    energyTrend:    checkEnergy(),
+    register:       estimateRegister(),
+    coaching:       [],  // populated below
+    callDuration:   Math.floor((Date.now() - callStartTime) / 1000),
+    utteranceCount: transcript.length
+  };
+
+  // Generate coaching tips based on analysis
+  analysis.coaching = generateCoachingTips(analysis);
+
+  // Send to background → content script
+  chrome.runtime.sendMessage({
+    action: 'analysisResult',
+    data: analysis
+  });
+}
+
+// ── Talk Ratio ──────────────────────────────────────────────
+function calcTalkRatio() {
+  if (!rollingWindow.length) return { rep: 50, prospect: 50 };
+  let repTime = 0, prospectTime = 0;
+  rollingWindow.forEach(u => {
+    if (u.speaker === 'rep') repTime += u.duration;
+    else prospectTime += u.duration;
+  });
+  const total = repTime + prospectTime || 1;
+  return {
+    rep: Math.round((repTime / total) * 100),
+    prospect: Math.round((prospectTime / total) * 100)
+  };
+}
+
+// ── Monologue Detection ─────────────────────────────────────
+function detectMonologue() {
+  // Check if the rep has been speaking for > 30 seconds without prospect
+  const recent = rollingWindow.slice(-10);
+  let consecutiveRepDuration = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    if (recent[i].speaker === 'rep') {
+      consecutiveRepDuration += recent[i].duration;
+    } else {
+      break;
+    }
+  }
+  return {
+    active: consecutiveRepDuration > 30,
+    duration: Math.round(consecutiveRepDuration),
+    alert: consecutiveRepDuration > 30
+  };
+}
+
+// ── Question Classification ─────────────────────────────────
+function classifyLastQuestion() {
+  const repUtterances = rollingWindow.filter(u => u.speaker === 'rep');
+  if (!repUtterances.length) return null;
+  const last = repUtterances[repUtterances.length - 1].text;
+  if (!last.includes('?')) return null;
+
+  const open = /^(what|how|why|tell me|describe|explain|walk me through)\b/i;
+  const leading = /(don't you think|wouldn't you|isn't it|right\?|correct\?|agree\?)/i;
+  const closed = /^(do |does |did |is |are |was |were |can |could |will |would |have |has |should )/i;
+
+  if (leading.test(last)) return { type: 'leading', text: last, quality: 'poor' };
+  if (open.test(last)) return { type: 'open', text: last, quality: 'good' };
+  if (closed.test(last)) return { type: 'closed', text: last, quality: 'neutral' };
+  return { type: 'unknown', text: last, quality: 'neutral' };
+}
+
+// ── Silence Detection ───────────────────────────────────────
+function detectSilence() {
+  if (rollingWindow.length < 2) return { active: false, duration: 0 };
+  const last = rollingWindow[rollingWindow.length - 1];
+  const secondLast = rollingWindow[rollingWindow.length - 2];
+  const gap = last.start - secondLast.end;
+  return {
+    active: gap > 5,
+    duration: Math.round(gap),
+    afterRepQuestion: secondLast.speaker === 'rep' && secondLast.text.includes('?')
+  };
+}
+
+// ── Objection Detection ─────────────────────────────────────
+const OBJECTION_PATTERNS = {
+  'OBJ-PRICE':    [/too expensive/i, /budget/i, /cost/i, /can't afford/i, /price/i, /cheap/i],
+  'OBJ-AUTH':     [/check with (my |the )?(boss|manager|team|board|ceo|cfo|vp)/i, /need (to |)approval/i, /run it by/i, /decision maker/i],
+  'OBJ-TIME':     [/not (the )?(right )?time/i, /next quarter/i, /too busy/i, /bad timing/i, /not right now/i, /maybe later/i, /end of year/i],
+  'OBJ-COMP':     [/already using/i, /competitor/i, /other (vendor|solution|tool|platform)/i, /comparing/i, /alternative/i, /looking at other/i],
+  'OBJ-TRUST':    [/not sure/i, /heard bad things/i, /previous vendor/i, /burned before/i, /don't trust/i, /skeptical/i, /too good to be true/i],
+  'OBJ-NEED':     [/we're fine/i, /managing (fine|ok)/i, /don't (really )?need/i, /not a priority/i, /don't see the point/i, /happy with what we have/i],
+  'OBJ-CHANGE':   [/change is (hard|difficult)/i, /team won't/i, /migration/i, /too much work/i, /disruption/i, /learning curve/i],
+  'OBJ-SCOPE':    [/too (big|complex|much)/i, /overkill/i, /only need/i, /too many features/i],
+  'OBJ-CONTRACT': [/locked in/i, /contract/i, /commitment/i, /term/i, /renewal/i, /stuck with/i],
+  'OBJ-GHOST':    [] // detected by behavior, not keywords
+};
+
+function detectObjections() {
+  const prospectUtterances = rollingWindow.filter(u => u.speaker === 'prospect');
+  const detected = [];
+
+  prospectUtterances.forEach(u => {
+    for (const [code, patterns] of Object.entries(OBJECTION_PATTERNS)) {
+      for (const p of patterns) {
+        if (p.test(u.text)) {
+          detected.push({
+            code,
+            text: u.text,
+            time: u.start,
+            timestamp: u.timestamp
+          });
+          break;
+        }
+      }
+    }
+  });
+
+  // Deduplicate by code (keep most recent)
+  const unique = {};
+  detected.forEach(d => { unique[d.code] = d; });
+  return Object.values(unique);
+}
+
+// ── Buying Signal Detection ─────────────────────────────────
+const SIGNAL_PATTERNS = {
+  'SIG-VISION':     [/when we (have|implement|use|deploy|roll out)/i, /once we/i, /I can see (us|our team)/i, /imagine if/i],
+  'SIG-INTERNAL':   [/(my |our )(vp|ceo|cfo|boss|manager|team|director) (would|will|should|needs|wants)/i, /run it past/i],
+  'SIG-OBJ-PAST':   [/I used to think/i, /at first I wasn't/i, /initially (I |we )?(was |were )?(skeptical|unsure|hesitant)/i, /I was wrong about/i],
+  'SIG-DETAIL':     [/how does (it|that|this)/i, /can it integrate/i, /what about/i, /tell me more/i, /does it (support|handle|work with)/i, /what's the process/i],
+  'SIG-EMOTIONAL':  [/love (that|this|it)/i, /excited/i, /that's (exactly|perfect)/i, /this is what (we |I )(need|want)/i, /amazing/i, /game.?changer/i],
+  'SIG-COMPETITIVE':[/better than/i, /unlike (the |)(other|competitor)/i, /the others (don't|can't)/i, /your (competitor|rival)/i],
+  'SIG-OWNERSHIP':  [/our (new )?(system|platform|solution|setup|deployment)/i, /when we use (this|it|your)/i, /our implementation/i],
+  'SIG-REPEAT':     [] // detected by repetition, not keywords
+};
+
+function detectSignals() {
+  const prospectUtterances = rollingWindow.filter(u => u.speaker === 'prospect');
+  const detected = [];
+
+  prospectUtterances.forEach(u => {
+    for (const [code, patterns] of Object.entries(SIGNAL_PATTERNS)) {
+      for (const p of patterns) {
+        if (p.test(u.text)) {
+          detected.push({
+            code,
+            text: u.text,
+            time: u.start,
+            timestamp: u.timestamp
+          });
+          break;
+        }
+      }
+    }
+  });
+
+  const unique = {};
+  detected.forEach(d => { unique[d.code] = d; });
+  return Object.values(unique);
+}
+
+// ── Ghost Detection ─────────────────────────────────────────
+function detectGhost() {
+  const prospectUtterances = transcript.filter(u => u.speaker === 'prospect');
+  if (prospectUtterances.length < 3) return { risk: 0, alert: false };
+
+  // Check last 3 prospect utterances for shrinking responses
+  const last3 = prospectUtterances.slice(-3);
+  const wordCounts = last3.map(u => u.wordCount);
+
+  // Ghost pattern: each response shorter than the previous
+  const shrinking = wordCounts[0] > wordCounts[1] && wordCounts[1] > wordCounts[2];
+  // All very short
+  const allShort = wordCounts.every(c => c <= 5);
+  // Last response is minimal
+  const minimalLast = wordCounts[2] <= 3;
+
+  let risk = 0;
+  if (shrinking) risk += 35;
+  if (allShort) risk += 30;
+  if (minimalLast) risk += 20;
+  // Check for disengagement phrases
+  const lastText = last3[last3.length - 1].text.toLowerCase();
+  if (/^(ok|okay|sure|yeah|mm-?hmm|right|fine|got it|uh-?huh)\.?$/i.test(lastText)) risk += 15;
+
+  return {
+    risk: Math.min(risk, 100),
+    alert: risk > 50,
+    pattern: shrinking ? 'shrinking' : allShort ? 'minimal' : 'normal',
+    lastWordCounts: wordCounts
+  };
+}
+
+// ── Energy Trend ────────────────────────────────────────────
+function checkEnergy() {
+  const prospectUtterances = transcript.filter(u => u.speaker === 'prospect');
+  if (prospectUtterances.length < 4) return { trend: 'insufficient', slope: 0 };
+
+  // Compare first half vs second half average word count
+  const mid = Math.floor(prospectUtterances.length / 2);
+  const firstHalf = prospectUtterances.slice(0, mid);
+  const secondHalf = prospectUtterances.slice(mid);
+
+  const avgFirst = firstHalf.reduce((s, u) => s + u.wordCount, 0) / firstHalf.length;
+  const avgSecond = secondHalf.reduce((s, u) => s + u.wordCount, 0) / secondHalf.length;
+
+  const ratio = avgSecond / (avgFirst || 1);
+
+  return {
+    trend: ratio > 1.2 ? 'rising' : ratio < 0.7 ? 'falling' : 'stable',
+    slope: Math.round((ratio - 1) * 100),
+    avgFirst: Math.round(avgFirst),
+    avgSecond: Math.round(avgSecond)
+  };
+}
+
+// ── Register Estimation (keyword-based, Phase 1) ────────────
+const REGISTER_INDICATORS = {
+  0: [/fine/i, /good/i, /nice/i, /how are you/i, /thanks for/i, /weather/i, /weekend/i],
+  1: [/need/i, /looking for/i, /requirement/i, /feature/i, /solution/i, /platform/i, /tool/i, /system/i, /integrate/i, /capability/i],
+  2: [/honestly/i, /to be (frank|honest)/i, /the real (issue|problem|challenge)/i, /actually/i, /truth is/i, /between us/i, /candid/i, /real talk/i],
+  3: [/drowning/i, /struggling/i, /frustrated/i, /losing/i, /overwhelmed/i, /desperate/i, /breaking point/i, /can't (keep|take|handle)/i, /falling apart/i, /stress/i, /up at night/i],
+  4: [/when we work together/i, /our plan/i, /let's (do|build|create)/i, /partnership/i, /together we/i, /I want (to|us to) (make|build)/i, /shared (vision|goal)/i]
+};
+
+function estimateRegister() {
+  const prospectUtterances = rollingWindow.filter(u => u.speaker === 'prospect');
+  if (!prospectUtterances.length) return { level: 0, trajectory: [], peak: 0 };
+
+  // Score each utterance
+  const registerHistory = [];
+  transcript.filter(u => u.speaker === 'prospect').forEach(u => {
+    let maxReg = 0;
+    for (const [level, patterns] of Object.entries(REGISTER_INDICATORS)) {
+      for (const p of patterns) {
+        if (p.test(u.text)) {
+          maxReg = Math.max(maxReg, parseInt(level));
+        }
+      }
+    }
+    registerHistory.push({ time: u.start, level: maxReg, text: u.text });
+  });
+
+  const current = registerHistory.length > 0 ? registerHistory[registerHistory.length - 1].level : 0;
+  const peak = Math.max(...registerHistory.map(r => r.level), 0);
+
+  // Detect drops
+  let drop = null;
+  if (registerHistory.length >= 2) {
+    const prev = registerHistory[registerHistory.length - 2].level;
+    if (prev > current && prev >= 2) {
+      drop = { from: prev, to: current };
+    }
+  }
+
+  return {
+    level: current,
+    peak,
+    trajectory: registerHistory.slice(-10).map(r => r.level),
+    drop
+  };
+}
+
+// ── Coaching Tip Generator ──────────────────────────────────
+function generateCoachingTips(analysis) {
+  const tips = [];
+
+  // Monologue warning
+  if (analysis.monologue.active) {
+    tips.push({
+      priority: 1,
+      type: 'warning',
+      icon: '⚠',
+      text: "You've been talking for " + analysis.monologue.duration + " seconds. Pause. Ask a question. Let them speak."
+    });
+  }
+
+  // Register drop
+  if (analysis.register.drop) {
+    tips.push({
+      priority: 1,
+      type: 'critical',
+      icon: '⚠',
+      text: 'Register dropped from REG-' + analysis.register.drop.from + ' to REG-' + analysis.register.drop.to + '. They opened up and the response missed it. Acknowledge what they shared before continuing.'
+    });
+  }
+
+  // Register depth achieved
+  if (analysis.register.level >= 3 && !analysis.register.drop) {
+    tips.push({
+      priority: 2,
+      type: 'coaching',
+      icon: '💬',
+      text: "They're being vulnerable (REG-" + analysis.register.level + "). Stay in the pain. DON'T pitch. Ask: \"What does that look like day to day for your team?\""
+    });
+  }
+
+  // Ghost detected
+  if (analysis.ghostRisk.alert) {
+    tips.push({
+      priority: 1,
+      type: 'warning',
+      icon: '👻',
+      text: "They've gone quiet. Short answers for the last few exchanges. Something shifted. Try: \"I feel like I might have lost you — did I miss something important?\""
+    });
+  }
+
+  // Talk ratio warning
+  if (analysis.talkRatio.rep > 70) {
+    tips.push({
+      priority: 2,
+      type: 'warning',
+      icon: '🔇',
+      text: 'Talk ratio ' + analysis.talkRatio.rep + '/' + analysis.talkRatio.prospect + ' — you\'re dominating the conversation. Ask an open question and wait.'
+    });
+  }
+
+  // Objections detected
+  analysis.objections.forEach(obj => {
+    const coaching = OBJECTION_COACHING[obj.code];
+    if (coaching) {
+      tips.push({
+        priority: 2,
+        type: 'objection',
+        icon: '🛡',
+        text: obj.code + ': ' + coaching
+      });
+    }
+  });
+
+  // Signals detected
+  analysis.signals.forEach(sig => {
+    tips.push({
+      priority: 3,
+      type: 'signal',
+      icon: '⚡',
+      text: sig.code + ' detected — "' + sig.text.substring(0, 50) + '..."'
+    });
+  });
+
+  // Energy falling
+  if (analysis.energyTrend.trend === 'falling') {
+    tips.push({
+      priority: 2,
+      type: 'warning',
+      icon: '📉',
+      text: 'Prospect energy is dropping. Their responses are getting shorter. Re-engage: ask about their biggest pain point.'
+    });
+  }
+
+  // Sort by priority (1 = most urgent)
+  tips.sort((a, b) => a.priority - b.priority);
+  return tips.slice(0, 5); // Max 5 visible tips
+}
+
+const OBJECTION_COACHING = {
+  'OBJ-PRICE':    "Price objection — but is it really about price? Try: \"Help me understand — is it the budget itself or whether the ROI justifies it?\"",
+  'OBJ-AUTH':     "Authority objection — this often hides OBJ-TRUST. Try: \"Totally fair. What would your boss need to see to feel confident?\"",
+  'OBJ-TIME':     "Timing objection — usually a soft no. Try: \"What changes between now and then that would make the timing better?\"",
+  'OBJ-COMP':     "Competitor objection — they're comparing. Try: \"What specifically would need to be true for you to switch?\"",
+  'OBJ-TRUST':    "Trust objection — deepest objection. Try: \"Sounds like you've been burned before. What happened?\"",
+  'OBJ-NEED':     "Need objection — they don't see the problem. Try: \"Walk me through what happens when [pain point] occurs today.\"",
+  'OBJ-CHANGE':   "Change objection — fear of disruption. Try: \"What would it cost your team to stay exactly where you are for another year?\"",
+  'OBJ-SCOPE':    "Scope objection — feels too big. Try: \"Most teams start with just [one module]. Would a focused pilot make sense?\"",
+  'OBJ-CONTRACT': "Contract objection — locked in elsewhere. Try: \"When does that come up for renewal? Let's plan around that.\""
+};
+
+// ── Stop Processing ─────────────────────────────────────────
+function stopProcessing() {
+  isProcessing = false;
+
+  // Stop MediaRecorder
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  mediaRecorder = null;
+
+  // Close Deepgram WebSocket
+  if (deepgramWs && deepgramWs.readyState === WebSocket.OPEN) {
+    deepgramWs.close();
+  }
+  deepgramWs = null;
+
+  // Stop media stream tracks
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+  }
+  mediaStream = null;
+
+  // Stop analysis loop
+  clearInterval(analysisTimer);
+  analysisTimer = null;
+
+  // Send final call data to background for storage
+  const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+  chrome.runtime.sendMessage({
+    action: 'callData',
+    data: {
+      duration,
+      transcript,
+      analysis: {
+        talkRatio: calcTalkRatio(),
+        register: estimateRegister(),
+        ghostRisk: detectGhost(),
+        signals: detectSignals(),
+        objections: detectObjections()
+      }
+    }
+  });
+
+  callStartTime = null;
+}
+</script>
+</body>
+</html>
