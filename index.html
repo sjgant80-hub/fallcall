@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FallCall — AI Sales Call Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --void: #06070b;
+  --surface: #0c0d14;
+  --surface-2: #11121b;
+  --border: #1a1b28;
+  --border-lit: #252738;
+  --text: #b8b5c8;
+  --dim: #5e5b72;
+  --bright: #eae7ff;
+  --accent: #6c5ce7;
+  --accent-g: rgba(108,92,231,0.12);
+  --green: #00d68f;
+  --green-g: rgba(0,214,143,0.10);
+  --gold: #f0c040;
+  --gold-g: rgba(240,192,64,0.10);
+  --red: #ff4757;
+  --red-g: rgba(255,71,87,0.08);
+  --ff: 'DM Sans', system-ui, sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;}
+body{font-family:var(--ff);background:var(--void);color:var(--text);line-height:1.6;overflow-x:hidden;}
+::selection{background:var(--accent);color:var(--void);}
+
+/* grain */
+body::after{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0.018;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;}
+
+/* layout */
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px;}
+section{padding:100px 0;}
+
+/* nav */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;background:rgba(6,7,11,0.88);backdrop-filter:blur(20px);border-bottom:1px solid transparent;transition:border-color .3s;}
+nav.scrolled{border-bottom-color:var(--border);}
+.logo{font-weight:700;font-size:17px;color:var(--bright);letter-spacing:-.02em;}
+.logo span{color:var(--accent);}
+.nav-links{display:flex;gap:24px;align-items:center;}
+.nav-links a{font-size:13px;color:var(--dim);font-weight:500;text-decoration:none;transition:color .2s;}
+.nav-links a:hover{color:var(--bright);}
+.nav-cta{background:var(--accent)!important;color:#fff!important;padding:7px 18px;border-radius:7px;font-weight:600!important;font-size:12px!important;letter-spacing:.02em;}
+
+/* hero */
+.hero{min-height:100vh;display:flex;align-items:center;padding-top:56px;position:relative;}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 50% 60% at 30% 40%,var(--accent-g),transparent),radial-gradient(ellipse 40% 50% at 70% 60%,var(--green-g),transparent);pointer-events:none;}
+.hero-inner{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;}
+.hero h1{font-size:clamp(32px,5vw,56px);font-weight:700;color:var(--bright);line-height:1.1;letter-spacing:-.03em;margin-bottom:20px;}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero-sub{font-size:17px;color:var(--dim);line-height:1.7;margin-bottom:32px;max-width:440px;}
+.hero-ctas{display:flex;gap:12px;flex-wrap:wrap;}
+.btn{padding:13px 28px;border-radius:9px;font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:#5a4bd4;transform:translateY(-1px);}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-ghost:hover{border-color:var(--accent);color:var(--bright);}
+
+/* hero demo card */
+.demo-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;position:relative;overflow:hidden;}
+.demo-card::before{content:'';position:absolute;top:0;right:0;width:200px;height:200px;background:radial-gradient(circle,var(--accent-g),transparent);pointer-events:none;}
+.demo-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+.demo-badge{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--green-g);color:var(--green);letter-spacing:.04em;}
+.demo-title{font-size:13px;font-weight:600;color:var(--bright);}
+
+/* analysis preview bars */
+.analysis-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.analysis-label{font-family:var(--mono);font-size:10px;color:var(--dim);min-width:80px;text-align:right;}
+.analysis-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.analysis-fill{height:100%;border-radius:3px;transition:width 1.5s cubic-bezier(.16,1,.3,1);}
+.analysis-val{font-family:var(--mono);font-size:10px;color:var(--dim);min-width:28px;}
+
+/* register timeline preview */
+.reg-timeline{display:flex;gap:2px;margin-top:16px;height:32px;align-items:flex-end;}
+.reg-bar{flex:1;border-radius:2px 2px 0 0;transition:height 1s cubic-bezier(.16,1,.3,1);min-width:4px;}
+.reg-label{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:6px;display:flex;justify-content:space-between;}
+
+/* section headers */
+.section-label{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;}
+.section-title{font-size:clamp(24px,3.5vw,40px);font-weight:700;color:var(--bright);line-height:1.15;letter-spacing:-.025em;margin-bottom:12px;}
+.section-sub{font-size:15px;color:var(--dim);max-width:520px;line-height:1.7;}
+
+/* layers grid */
+.layers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:48px;}
+.layer-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .3s;}
+.layer-card:hover{border-color:var(--border-lit);}
+.layer-num{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.06em;margin-bottom:8px;}
+.layer-name{font-size:16px;font-weight:700;color:var(--bright);margin-bottom:6px;}
+.layer-desc{font-size:13px;color:var(--dim);line-height:1.6;}
+.layer-tag{display:inline-block;font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;margin-top:10px;letter-spacing:.04em;}
+.tag-new{background:var(--green-g);color:var(--green);}
+.tag-unique{background:var(--gold-g);color:var(--gold);}
+.tag-core{background:var(--accent-g);color:var(--accent);}
+
+/* comparison table */
+.comp-table{width:100%;border-collapse:collapse;margin-top:40px;}
+.comp-table th{font-family:var(--mono);font-size:10px;color:var(--dim);text-align:left;padding:12px 16px;border-bottom:1px solid var(--border);letter-spacing:.06em;text-transform:uppercase;}
+.comp-table td{padding:14px 16px;font-size:13px;border-bottom:1px solid var(--border);}
+.comp-table td:first-child{font-weight:600;color:var(--bright);}
+.comp-check{color:var(--green);font-weight:700;}
+.comp-x{color:var(--red);opacity:.5;}
+.comp-partial{color:var(--gold);}
+.comp-highlight{background:var(--accent-g);}
+
+/* pricing */
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:48px;}
+.price-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px 28px;display:flex;flex-direction:column;}
+.price-card.featured{border-color:var(--accent);box-shadow:0 0 40px var(--accent-g);}
+.price-tier{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;}
+.price-amount{font-size:36px;font-weight:700;color:var(--bright);margin-bottom:4px;}
+.price-amount span{font-size:14px;font-weight:400;color:var(--dim);}
+.price-desc{font-size:13px;color:var(--dim);margin-bottom:24px;line-height:1.6;flex:1;}
+.price-features{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;}
+.price-feat{font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;}
+.price-feat::before{content:'✓';color:var(--green);font-size:11px;font-weight:700;}
+
+/* try it section */
+.try-panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px;margin-top:48px;}
+.try-input{width:100%;min-height:120px;background:var(--void);border:1px solid var(--border);border-radius:10px;padding:16px;color:var(--text);font-family:var(--ff);font-size:14px;resize:vertical;line-height:1.6;transition:border-color .2s;}
+.try-input:focus{outline:none;border-color:var(--accent);}
+.try-input::placeholder{color:var(--dim);opacity:.4;}
+.try-btn{margin-top:12px;padding:13px 28px;background:var(--accent);border:none;border-radius:9px;color:#fff;font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer;}
+.try-btn:hover{background:#5a4bd4;}
+.try-btn:disabled{opacity:.5;cursor:not-allowed;}
+.try-output{margin-top:20px;display:none;}
+.try-output.visible{display:block;}
+
+/* footer */
+footer{padding:48px 0;border-top:1px solid var(--border);}
+.footer-inner{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:24px;}
+.footer-text{font-size:12px;color:var(--dim);line-height:1.8;max-width:400px;}
+.footer-links{display:flex;gap:20px;}
+.footer-links a{font-size:12px;font-family:var(--mono);color:var(--dim);text-decoration:none;}
+.footer-links a:hover{color:var(--accent);}
+
+/* responsive */
+@media(max-width:768px){
+  .hero-inner{grid-template-columns:1fr;gap:40px;}
+  .nav-links{display:none;}
+  .layers-grid{grid-template-columns:1fr;}
+  .pricing-grid{grid-template-columns:1fr;}
+  .comp-table{font-size:11px;}
+  .comp-table th,.comp-table td{padding:10px 8px;}
+}
+
+/* animations */
+.fade-in{opacity:0;transform:translateY(20px);transition:opacity .6s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1);}
+.fade-in.vis{opacity:1;transform:translateY(0);}
+.fade-d1{transition-delay:.06s;}.fade-d2{transition-delay:.12s;}.fade-d3{transition-delay:.18s;}.fade-d4{transition-delay:.24s;}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <a href="#" class="logo">Fall<span>Call</span></a>
+  <div class="nav-links">
+    <a href="#layers">How it works</a>
+    <a href="#compare">vs Gong</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#try" class="nav-cta">Try it free</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div>
+      <h1 class="fade-in">Your reps are<br>missing <em>everything</em></h1>
+      <p class="hero-sub fade-in fade-d1">Gong tells you talk ratio. FallCall tells you the prospect went quiet at minute 18 because your rep quoted enterprise pricing without reading the room — and the follow-up they booked is with someone who's already checked out.</p>
+      <div class="hero-ctas fade-in fade-d2">
+        <button class="btn btn-primary" onclick="document.getElementById('try').scrollIntoView({behavior:'smooth'})">Analyse a call free</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('layers').scrollIntoView({behavior:'smooth'})">See how it works</button>
+      </div>
+    </div>
+    <div class="demo-card fade-in fade-d3">
+      <div class="demo-header">
+        <span class="demo-title">Sarah Chen → Acme Corp</span>
+        <span class="demo-badge">LIVE ANALYSIS</span>
+      </div>
+      <div class="analysis-row"><span class="analysis-label">Register</span><div class="analysis-track"><div class="analysis-fill" style="width:72%;background:var(--gold)"></div></div><span class="analysis-val">REG-3</span></div>
+      <div class="analysis-row"><span class="analysis-label">Signals</span><div class="analysis-track"><div class="analysis-fill" style="width:85%;background:var(--green)"></div></div><span class="analysis-val">4/5</span></div>
+      <div class="analysis-row"><span class="analysis-label">Objections</span><div class="analysis-track"><div class="analysis-fill" style="width:45%;background:var(--accent)"></div></div><span class="analysis-val">2/3</span></div>
+      <div class="analysis-row"><span class="analysis-label">Ghost risk</span><div class="analysis-track"><div class="analysis-fill" style="width:78%;background:var(--red)"></div></div><span class="analysis-val">78%</span></div>
+      <div class="analysis-row"><span class="analysis-label">False +ve</span><div class="analysis-track"><div class="analysis-fill" style="width:82%;background:var(--red)"></div></div><span class="analysis-val">82%</span></div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+        <p style="font-family:var(--mono);font-size:10px;color:var(--red);letter-spacing:.04em;margin-bottom:6px;">⚠ CRITICAL MOMENT — 08:14</p>
+        <p style="font-size:12px;color:var(--text);line-height:1.6;">Prospect said <span style="color:var(--bright)">"we're drowning, basically"</span> — reached REG-3 vulnerability. Rep responded with feature pitch. Register collapsed to REG-1. Prospect disengaged by minute 18. Follow-up booked but prospect is in ghost state.</p>
+        <p style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:8px;">Should have said: "Tell me more about that — what does drowning look like on a Monday morning for your team?"</p>
+      </div>
+      <div class="reg-timeline" id="heroTimeline"></div>
+      <div class="reg-label"><span>0:00</span><span>REG-0</span><span>REG-1</span><span>REG-3 ↓</span><span>GHOST</span><span>27:43</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT WE CATCH -->
+<section id="layers">
+  <div class="wrap">
+    <p class="section-label fade-in">Seven layers deep</p>
+    <h2 class="section-title fade-in fade-d1">What every other tool misses</h2>
+    <p class="section-sub fade-in fade-d2">Most call analysis stops at talk ratio and keywords. We go seven layers deep into the psychology of every sales conversation.</p>
+
+    <div class="layers-grid">
+      <div class="layer-card fade-in">
+        <p class="layer-num">LAYER 0</p>
+        <p class="layer-name">Environmental Intelligence</p>
+        <p class="layer-desc">Is the prospect in their office, in a car, at a conference? Each environment changes what "yes" means. A mobile yes is worth half a desk yes. An open-office prospect physically can't be vulnerable.</p>
+        <span class="layer-tag tag-new">NEW — nobody does this</span>
+      </div>
+      <div class="layer-card fade-in fade-d1">
+        <p class="layer-num">LAYER 1</p>
+        <p class="layer-name">Conversation Mechanics</p>
+        <p class="layer-desc">Talk ratio, question quality, monologue detection, silence analysis. But weighted — leading questions don't count as discovery. Rep filling silence is almost always wrong.</p>
+        <span class="layer-tag tag-core">CORE</span>
+      </div>
+      <div class="layer-card fade-in fade-d2">
+        <p class="layer-num">LAYER 2</p>
+        <p class="layer-name">Objection Architecture</p>
+        <p class="layer-desc">Ten objection types, each with a distinct resolution. Plus layered objection detection — "I need to check with my boss" often hides "I don't trust vendors." The first objection is rarely the real one.</p>
+        <span class="layer-tag tag-unique">10 codes + layering</span>
+      </div>
+      <div class="layer-card fade-in fade-d3">
+        <p class="layer-num">LAYER 3</p>
+        <p class="layer-name">Buying Signal Detection</p>
+        <p class="layer-desc">Eight signal types beyond "what's the price." Ownership language, self-resolved objections, competitive dismissals, vision statements. The signals your reps walk past every day.</p>
+        <span class="layer-tag tag-unique">8 signal types</span>
+      </div>
+      <div class="layer-card fade-in">
+        <p class="layer-num">LAYER 4</p>
+        <p class="layer-name">Psychological Register</p>
+        <p class="layer-desc">Five depth levels from surface pleasantries to vulnerable partnership. Tracked as a trajectory, not a snapshot. The drop from REG-3 back to REG-1 is the most expensive mistake in sales.</p>
+        <span class="layer-tag tag-new">NEW — nobody tracks this</span>
+      </div>
+      <div class="layer-card fade-in fade-d1">
+        <p class="layer-num">LAYER 5</p>
+        <p class="layer-name">Critical Moments</p>
+        <p class="layer-desc">The 2-3 seconds where the deal was won or lost. Doors opened, doors closed, pivot points, golden moments, self-inflicted wounds. With the exact words the rep should have said.</p>
+        <span class="layer-tag tag-core">CORE</span>
+      </div>
+      <div class="layer-card fade-in fade-d2">
+        <p class="layer-num">LAYER 6</p>
+        <p class="layer-name">False Positive Detection</p>
+        <p class="layer-desc">The "happy ears" killer. Scores how likely a deal is dead despite having a booked follow-up. Stops reps wasting time on pipeline that doesn't exist.</p>
+        <span class="layer-tag tag-new">NEW — nobody does this</span>
+      </div>
+      <div class="layer-card fade-in fade-d3">
+        <p class="layer-num">LAYER 7</p>
+        <p class="layer-name">Champion Detection</p>
+        <p class="layer-desc">Is this prospect actively selling for you inside their organisation? Scored 0-100 based on internal advocacy language, stakeholder mentions, competitive intel volunteered.</p>
+        <span class="layer-tag tag-new">NEW — nobody scores this</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section id="compare" style="background:var(--surface);">
+  <div class="wrap">
+    <p class="section-label fade-in">The comparison nobody wants you to see</p>
+    <h2 class="section-title fade-in fade-d1">FallCall vs the market</h2>
+
+    <table class="comp-table fade-in fade-d2">
+      <thead>
+        <tr>
+          <th>Capability</th>
+          <th class="comp-highlight">FallCall</th>
+          <th>Gong</th>
+          <th>Chorus</th>
+          <th>Revenue.io</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Talk ratio & keywords</td><td class="comp-highlight comp-check">✓</td><td class="comp-check">✓</td><td class="comp-check">✓</td><td class="comp-check">✓</td></tr>
+        <tr><td>Basic sentiment</td><td class="comp-highlight comp-check">✓</td><td class="comp-check">✓</td><td class="comp-check">✓</td><td class="comp-check">✓</td></tr>
+        <tr><td>Environmental intelligence</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>Register depth tracking</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>Layered objection detection</td><td class="comp-highlight comp-check">✓</td><td class="comp-partial">partial</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>Ghost detection</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>False positive scoring</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>Champion detection</td><td class="comp-highlight comp-check">✓</td><td class="comp-partial">partial</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>Defence mechanism analysis</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr><td>Specific word-for-word coaching</td><td class="comp-highlight comp-check">✓</td><td class="comp-partial">generic</td><td class="comp-partial">generic</td><td class="comp-x">✗</td></tr>
+        <tr><td>CRM reality mismatch</td><td class="comp-highlight comp-check">✓</td><td class="comp-x">✗</td><td class="comp-x">✗</td><td class="comp-x">✗</td></tr>
+        <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Price per user/month</td><td class="comp-highlight" style="color:var(--green);font-weight:700">£47</td><td style="color:var(--red)">$100-150</td><td style="color:var(--red)">$100</td><td style="color:var(--red)">$85</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="wrap">
+    <p class="section-label fade-in">Pricing</p>
+    <h2 class="section-title fade-in fade-d1">Half the price. Ten times the depth.</h2>
+
+    <div class="pricing-grid">
+      <div class="price-card fade-in">
+        <p class="price-tier">Starter</p>
+        <p class="price-amount">Free</p>
+        <p class="price-desc">Paste a transcript. Get the full 7-layer analysis. See what you've been missing. No account needed.</p>
+        <div class="price-features">
+          <div class="price-feat">5 calls per month</div>
+          <div class="price-feat">All 7 analysis layers</div>
+          <div class="price-feat">XML + markdown export</div>
+          <div class="price-feat">No account required</div>
+        </div>
+        <button class="btn btn-ghost" onclick="document.getElementById('try').scrollIntoView({behavior:'smooth'})">Try it now</button>
+      </div>
+      <div class="price-card featured fade-in fade-d1">
+        <p class="price-tier">Team</p>
+        <p class="price-amount">£47 <span>/user/month</span></p>
+        <p class="price-desc">For sales managers who need team-level patterns, rep comparison, and coaching recommendations that actually tell you what to say.</p>
+        <div class="price-features">
+          <div class="price-feat">Unlimited calls</div>
+          <div class="price-feat">Team pattern analysis</div>
+          <div class="price-feat">Rep benchmarking</div>
+          <div class="price-feat">Coaching recommendation engine</div>
+          <div class="price-feat">CRM integration</div>
+          <div class="price-feat">Manager dashboard</div>
+          <div class="price-feat">Priority support</div>
+        </div>
+        <button class="btn btn-primary">Start 14-day trial</button>
+      </div>
+      <div class="price-card fade-in fade-d2">
+        <p class="price-tier">Enterprise</p>
+        <p class="price-amount">Custom</p>
+        <p class="price-desc">Custom objection codes for your industry. Custom signal types for your vertical. Full 8+1 agent architecture. Dedicated implementation.</p>
+        <div class="price-features">
+          <div class="price-feat">Everything in Team</div>
+          <div class="price-feat">Custom analysis framework</div>
+          <div class="price-feat">API access</div>
+          <div class="price-feat">Webhook integration</div>
+          <div class="price-feat">Dedicated CSM</div>
+          <div class="price-feat">Konomi licence system</div>
+        </div>
+        <button class="btn btn-ghost">Talk to us</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRY IT -->
+<section id="try" style="background:var(--surface);">
+  <div class="wrap">
+    <p class="section-label fade-in">See it work</p>
+    <h2 class="section-title fade-in fade-d1">Paste a transcript. Watch what happens.</h2>
+    <p class="section-sub fade-in fade-d2">No account. No credit card. Paste any sales call transcript and get the full 7-layer analysis in seconds.</p>
+
+    <div class="try-panel fade-in fade-d3">
+      <textarea class="try-input" id="tryInput" placeholder="Paste a sales call transcript here...
+
+Rep: Hi Sarah, thanks for taking the time today.
+Prospect: Yeah no problem, I've got about twenty minutes.
+Rep: Great, so let me tell you about our platform..."></textarea>
+      <button class="btn btn-primary try-btn" id="tryBtn" onclick="runAnalysis()">Analyse this call</button>
+      <div class="try-output" id="tryOutput"></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap footer-inner">
+    <p class="footer-text">
+      FallCall — AI Sales Call Intelligence<br>
+      Seven layers deep. Half the price. Ten times the insight.<br>
+      Built by <span style="color:var(--accent)">AI Native Solutions</span> · Powered by Konomi Architecture<br>
+      <span style="color:var(--accent)">◊</span>
+    </p>
+    <div class="footer-links">
+      <a href="#">API Docs</a>
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="https://ai-nativesolutions.com">AI Native Solutions</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Nav scroll
+window.addEventListener('scroll',()=>{document.getElementById('nav').classList.toggle('scrolled',window.scrollY>20);});
+
+// Scroll reveal
+const obs=new IntersectionObserver(e=>{e.forEach(el=>{if(el.isIntersecting)el.target.classList.add('vis');});},{threshold:.1,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.fade-in').forEach(el=>obs.observe(el));
+
+// Hero register timeline animation
+const timeline=document.getElementById('heroTimeline');
+const regData=[1,1,1,2,2,2,3,3,4,4,4,3,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1];
+const regColors={1:'var(--dim)',2:'var(--accent)',3:'var(--gold)',4:'var(--green)'};
+regData.forEach((r,i)=>{
+  const bar=document.createElement('div');
+  bar.className='reg-bar';
+  bar.style.background=regColors[r];
+  bar.style.height='0px';
+  bar.style.transitionDelay=(i*40)+'ms';
+  timeline.appendChild(bar);
+  setTimeout(()=>{bar.style.height=(r*8)+'px';},500);
+});
+
+// Analysis engine (connects to multi-provider backend)
+async function runAnalysis(){
+  const input=document.getElementById('tryInput');
+  const btn=document.getElementById('tryBtn');
+  const output=document.getElementById('tryOutput');
+  const text=input.value.trim();
+  if(!text||text.length<50){input.style.borderColor='var(--red)';setTimeout(()=>input.style.borderColor='',1500);return;}
+  
+  btn.disabled=true;
+  btn.textContent='Analysing...';
+  output.classList.add('visible');
+  output.innerHTML='<div style="padding:20px;text-align:center;"><p style="font-family:var(--mono);font-size:12px;color:var(--accent);">◊ Running 7-layer analysis...</p><p style="font-size:13px;color:var(--dim);margin-top:8px;">Environmental scan → Mechanics → Objections → Signals → Register → Critical moments → False positive check</p></div>';
+
+  const systemPrompt=`You are FallCall, an elite sales call analysis engine. Analyse this transcript across 7 layers:
+Layer 0 - Environment: Where is the prospect? (office/mobile/home/conference/open-office)
+Layer 1 - Mechanics: Talk ratio, question quality (open/closed/leading), monologues, silence patterns
+Layer 2 - Objections: Classify using OBJ-PRICE/AUTH/TIME/COMP/TRUST/NEED/CHANGE/SCOPE/CONTRACT/GHOST. Look for layered objections - the surface objection hiding a deeper one.
+Layer 3 - Buying Signals: Detect SIG-VISION/INTERNAL/OBJECTION-PAST/DETAIL/REPEAT/EMOTIONAL/COMPETITIVE/OWNERSHIP. Flag missed signals.
+Layer 4 - Register: Track REG-0(surface) through REG-4(partnered) as a trajectory through the call. Flag any drops.
+Layer 5 - Critical Moments: The 2-3 seconds where the deal was won or lost. What the rep did vs should have done. Give EXACT words.
+Layer 6 - False Positive: Score 0-100 how likely this deal is dead despite appearing alive.
+Layer 7 - Champion: Score 0-100 whether this prospect is selling internally for the rep.
+
+Output as clean markdown with headers for each layer. Be specific. Quote exact transcript lines. Give exact recommended words, not generic advice.`;
+
+  // Multi-provider routing - free first
+  const backends=[
+    {name:'gemini',url:'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',format:'gemini'},
+    {name:'anthropic',url:'https://api.anthropic.com/v1/messages',format:'anthropic'}
+  ];
+
+  let result=null;
+  for(const b of backends){
+    try{
+      if(b.format==='gemini'){
+        const key=localStorage.getItem('gemini_key');
+        if(!key)continue;
+        const r=await fetch(b.url+'?key='+key,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:systemPrompt+'\\n\\nTRANSCRIPT:\\n'+text}]}]})});
+        const d=await r.json();
+        result=d.candidates?.[0]?.content?.parts?.[0]?.text;
+      }else{
+        const key=localStorage.getItem('anthropic_key');
+        if(!key)continue;
+        const r=await fetch(b.url,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,system:systemPrompt,messages:[{role:'user',content:'TRANSCRIPT:\\n'+text}]})});
+        const d=await r.json();
+        result=d.content?.filter(c=>c.type==='text').map(c=>c.text).join('\\n');
+      }
+      if(result)break;
+    }catch(e){console.warn(b.name+' failed:',e.message);}
+  }
+
+  if(result){
+    output.innerHTML='<div style="padding:24px;font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap;font-family:var(--ff);">'+escapeHtml(result)+'</div>';
+  }else{
+    output.innerHTML=`<div style="padding:24px;">
+      <p style="font-size:14px;color:var(--bright);margin-bottom:12px;">To run the analysis, add an API key in settings:</p>
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:400px;">
+        <input type="password" id="geminiKey" placeholder="Gemini API key (free)" style="padding:10px 14px;background:var(--void);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--ff);font-size:13px;">
+        <input type="password" id="anthropicKey" placeholder="Anthropic API key (optional)" style="padding:10px 14px;background:var(--void);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--ff);font-size:13px;">
+        <button class="btn btn-primary" onclick="saveKeys()" style="align-self:flex-start;">Save & analyse</button>
+      </div>
+      <p style="font-size:11px;color:var(--dim);margin-top:10px;font-family:var(--mono);">Keys stored in your browser only. Never sent to our servers. Direct API calls from your tab.</p>
+    </div>`;
+  }
+  btn.disabled=false;
+  btn.textContent='Analyse another call';
+}
+
+function saveKeys(){
+  const g=document.getElementById('geminiKey')?.value;
+  const a=document.getElementById('anthropicKey')?.value;
+  if(g)localStorage.setItem('gemini_key',g);
+  if(a)localStorage.setItem('anthropic_key',a);
+  runAnalysis();
+}
+
+function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+</script>
+</body>
+</html>
