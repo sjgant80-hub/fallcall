@@ -418,5 +418,31 @@ function saveKeys(){
 
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 </script>
+
+<!-- forge-mesh-shim-v1 · ◊·κ=1 · FallMesh interop · prime 2 -->
+<script>
+(function(){
+  if (typeof BroadcastChannel === 'undefined') return;
+  var ch; try { ch = new BroadcastChannel('fallmesh'); } catch (e) { return; }
+  var NODE = { id: "fallcall", prime: 2, name: "FallCall" };
+  function post(type, data) {
+    try { ch.postMessage(Object.assign({ type: type, from: NODE.id, prime: NODE.prime, name: NODE.name, t: Date.now() }, data || {})); } catch (e) {}
+  }
+  window.fallmesh = {
+    post: post,
+    emit: function(data) { post("call:scored", data); },
+    request: function(type, payload) { post('request:' + type, { payload: payload }); }
+  };
+  ch.onmessage = function(e) {
+    var m = e.data; if (!m || m.from === NODE.id) return;
+    if (m.type === 'mesh:ping') post('mesh:pong', { url: location.origin + location.pathname, capabilities: ['announce'] });
+  };
+  post('node:online', { url: location.origin + location.pathname });
+  // Activity heartbeat — first user interaction
+  var beat = function() { post('node:active'); document.removeEventListener('click', beat); };
+  document.addEventListener('click', beat, { once: true });
+})();
+</script>
+
 </body>
 </html>
